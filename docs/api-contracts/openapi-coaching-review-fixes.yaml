@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: SCMS coaching review corrections (SCRUM-133 / SCRUM-134)
+  version: 1.0.0
+  description: Corrections from review of PR 79, inherited by PR 78. All responses use the existing ApiResponse envelope and Accept-Language localization.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /coach-bookings:
+    post:
+      summary: Member books a one-hour PT session
+      description: Requires an active, unexpired membership covering today and the booking date for every payment method. Slots start on the hour between 06:00 and 20:00 and must be at least two hours ahead. Rejects overlapping PT or booked group sessions. At most three consecutive one-hour PT slots per coach are allowed; the next slot must remain free (409 COACH_REST_REQUIRED), including bookings inserted out of order. Confirmed and completed PT sessions count toward this rule. Paid methods remain pending until the front desk confirms payment (POST /coach-bookings/{id}/confirm-payment); package quota uses used_quota. A member may hold at most two unpaid hourly sessions, past or upcoming (409 COACH_BOOKING_UNPAID_LIMIT). Concurrent bookings by one member are serialized so the monthly quota cannot be exceeded. Database triggers enforce concurrent schedule and membership checks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coachId, bookingDate, startTime, endTime]
+              properties:
+                coachId: {type: integer, format: int64}
+                disciplineId: {type: integer, format: int64, nullable: true}
+                bookingDate: {type: string, format: date}
+                startTime: {type: string, example: '14:00:00'}
+                endTime: {type: string, example: '15:00:00'}
+                paymentMethod: {type: string, enum: [package_quota, cash, bank_transfer, online_wallet], default: package_quota}
+                notes: {type: string, nullable: true}
+      responses:
+        '201': {description: ApiResponse containing CoachBookingDto; paymentStatus is pending or used_quota}
+        '400': {description: Invalid slot, unavailable membership, exhausted quota or INVALID_PAYMENT_METHOD}
+        '403': {description: Role denied or trigger rejects inactive membership}
+        '409': {description: Schedule conflict, COACH_REST_REQUIRED, COACH_ON_LEAVE, COACH_BOOKING_UNPAID_LIMIT, or SCHEDULE_UPDATE_IN_PROGRESS while a concurrent schedule write holds the guard; client may retry after refreshing}
+  /coach-bookings/recurring:
+    post:
+      summary: Standing 1:1 booking for a week or a month (MEMBER)
+      description: >
+        Books the same one-hour slot with one coach on the chosen ISO weekdays (defaults to the weekday of startDate)
+        for a week (7 rolling days) or a calendar month from startDate. A weekday already past in the current calendar week is booked in the following week within that rolling window. Each date goes through the normal single-booking rules
+        (coach rest after three consecutive PT slots, coach and member conflicts, membership covering the date, monthly package quota, two-unpaid cap); dates that
+        fail are returned in skipped with the error code and a localised reason while the rest are kept.
+        Status 201 when at least one booking was created, 200 when none was. Unknown coach fails immediately with 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coachId, startDate, startTime, endTime, period]
+              properties:
+                coachId: { type: integer, format: int64 }
+                disciplineId: { type: integer, format: int64 }
+                startDate: { type: string, format: date }
+                startTime: { type: string, example: '18:00:00' }
+                endTime: { type: string, example: '19:00:00' }
+                period: { type: string, enum: [week, month] }
+                daysOfWeek: { type: array, maxItems: 7, items: { type: integer, minimum: 1, maximum: 7 } }
+                paymentMethod: { type: string }
+                notes: { type: string }
+      responses:
+        '201': { description: 'data = { booked: CoachBooking[], skipped: [{ date, code, message }] }' }
+        '200': { description: 'No date could be booked; data.skipped explains each one' }
+        '400': { description: Invalid period or weekdays }
+        '403': { description: MEMBER required }
+        '404': { description: Coach not found }
+  /coach-bookings/unpaid:
+    get:
+      summary: Hourly PT sessions waiting for payment (RECEPTIONIST, CENTER_MANAGER)
+      description: Confirmed or completed sessions whose paymentStatus is pending, oldest first.
+      responses:
+        '200': {description: ApiResponse containing CoachBookingDto[]}
+        '403': {description: Role denied}
+  /coach-bookings/{id}/confirm-payment:
+    post:
+      summary: Front desk records payment for an hourly PT session (RECEPTIONIST, CENTER_MANAGER)
+      description: Sets paymentStatus to paid and writes a successful payment of the session's hourlyRate so it appears in revenue reports. method defaults to the booking's payment method.
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: integer, format: int64}}
+        - {in: query, name: method, schema: {type: string, enum: [cash, bank_transfer, online_wallet]}}
+      responses:
+        '200': {description: ApiResponse containing CoachBookingDto with paymentStatus paid}
+        '400': {description: INVALID_PAYMENT_METHOD}
+        '403': {description: Role denied}
+        '404': {description: Booking not found}
+        '409': {description: COACH_BOOKING_PAYMENT_NOT_PENDING when the session is cancelled, uses package quota or is already paid}
+  /coach-bookings/{id}:
+    delete:
+      summary: Cancel a PT booking
+      description: Allowed for its member, its assigned coach or a center manager. An unrelated coach receives HTTP 403.
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: integer, format: int64}}
+        - {in: query, name: reason, schema: {type: string}}
+      responses:
+        '200': {description: ApiResponse containing cancelled CoachBookingDto}
+        '400': {description: Already cancelled}
+        '403': {description: Not authorized for this booking}
+        '404': {description: Booking not found}
+  /coaching/reviews:
+    post:
+      summary: Member reviews their completed session
+      description: Supply exactly one of bookingId or classSessionId. The session must belong to the member, use the requested coach, have ended and not be cancelled. For a class session the member must have been marked present or late (403 REVIEW_NOT_ATTENDED). Each member may review a session once. The owner's response retains source IDs even when anonymous.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coachId, rating]
+              properties:
+                coachId: {type: integer, format: int64}
+                bookingId: {type: integer, format: int64, nullable: true}
+                classSessionId: {type: integer, format: int64, nullable: true}
+                rating: {type: integer, minimum: 1, maximum: 5}
+                comment: {type: string, maxLength: 2000, nullable: true}
+                isAnonymous: {type: boolean, default: false}
+      responses:
+        '201': {description: ApiResponse containing CoachReviewDto for the owner}
+        '400': {description: INVALID_REVIEW_SOURCE or REVIEW_SESSION_NOT_FINISHED}
+        '403': {description: Member does not own the booking/enrollment or coach does not match}
+        '404': {description: Session not found}
+        '409': {description: DUPLICATE_REVIEW; unique constraints also guard concurrent submissions}
+  /coaching/reviews/coach/{coachId}:
+    get:
+      summary: Read approved reviews for a coach
+      description: Anonymous reviews redact memberId, bookingId and classSessionId. These properties are nullable. The owner's /coaching/reviews/my response retains source IDs to identify sessions already reviewed.
+      parameters:
+        - {in: path, name: coachId, required: true, schema: {type: integer, format: int64}}
+      responses:
+        '200': {description: ApiResponse containing an array of CoachReviewDto}
+  /coaching/leaderboard:
+    get:
+      summary: Read published monthly coach rankings
+      description: Read-only. Returns an empty list if no published ranking exists. Never generates, overwrites or publishes monthly reviews; generation remains an explicit manager POST to /coaching/monthly-reviews/generate.
+      parameters:
+        - {in: query, name: year, schema: {type: integer}}
+        - {in: query, name: month, schema: {type: integer}}
+      responses:
+        '200': {description: ApiResponse containing an array of CoachLeaderboardItemDto}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

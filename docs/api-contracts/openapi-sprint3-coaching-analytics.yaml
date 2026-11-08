@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: SCMS Sprint 3 - Coaching, AI Recommendation & Utilization Analytics APIs
+  version: 1.1.0
+  description: >
+    OpenAPI contract for Training Plans (SCRUM-116), AI Workout Recommendations (SCRUM-117),
+    Session Evaluations (SCRUM-119), and Class Utilization Reports (SCRUM-120).
+paths:
+  # Exercise create/add DTOs accept restSeconds/rest_seconds (integer >= 0, nullable).
+  # All plan/item responses include restSeconds. Historic null values stay null.
+  # Persistence is an additive nullable JPA column; no manual migration/backfill.
+  /api/v1/coaching/training-plans:
+    get:
+      summary: List training plans filtered by memberId or coachId
+      tags: [Coaching]
+      parameters:
+        - in: query
+          name: memberId
+          schema:
+            type: integer
+            format: int64
+        - in: query
+          name: coachId
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Training plans retrieved successfully
+    post:
+      summary: Create a new draft training plan (SCRUM-116)
+      tags: [Coaching]
+      responses:
+        '201':
+          description: Training plan created successfully
+  /api/v1/coaching/training-plans/my:
+    get:
+      summary: Retrieve active training plans for current member (SCRUM-116, SCRUM-129)
+      tags: [Coaching]
+      responses:
+        '200':
+          description: Active training plans retrieved successfully
+  /api/v1/coaching/training-plans/{id}/items:
+    post:
+      summary: Add an exercise item to a draft training plan (SCRUM-116)
+      tags: [Coaching]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '201':
+          description: Exercise item added successfully
+  /api/v1/coaching/training-plans/{id}:
+    put:
+      summary: Update header and existing exercises of a draft or active plan (owner Coach or CENTER_MANAGER)
+      tags: [Coaching]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                goal: { type: string, maxLength: 255 }
+                startDate: { type: string, format: date }
+                endDate: { type: string, format: date }
+                items:
+                  type: array
+                  description: Optional list of full exercise values. Each ID must belong to this plan and appear once. Omitted exercises are unchanged; IDs and completion records are preserved.
+                  items:
+                    type: object
+                    required: [id, exerciseName]
+                    properties:
+                      id: { type: integer, format: int64 }
+                      exerciseName: { type: string, minLength: 1, maxLength: 150 }
+                      description: { type: string, nullable: true }
+                      dayOfWeek: { type: integer, minimum: 1, maximum: 7, nullable: true }
+                      sets: { type: integer, minimum: 1, nullable: true }
+                      reps: { type: integer, minimum: 1, nullable: true }
+                      durationMinutes: { type: integer, minimum: 1, nullable: true }
+                      restSeconds: { type: integer, minimum: 0, nullable: true }
+      responses:
+        '200': { description: Training plan updated successfully }
+        '400': { description: INVALID_DATE_RANGE }
+        '403': { description: Plan belongs to another Coach }
+        '409': { description: INVALID_PLAN_STATUS - completed or cancelled plan }
+    delete:
+      summary: Delete a draft or withdraw an active plan (owner Coach or CENTER_MANAGER)
+      tags: [Coaching]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: 'Draft removed; active plan becomes cancelled and is no longer shown to the member. Existing exercises/completion history are retained for active plans. Repeated withdrawal is idempotent.' }
+        '403': { description: Plan belongs to another Coach }
+        '404': { description: Plan not found }
+        '409': { description: INVALID_PLAN_STATUS - completed plans cannot be deleted }
+  /api/v1/coaching/training-plans/{id}/activate:
+    put:
+      summary: Activate a draft training plan and archive older active plans (SCRUM-116)
+      tags: [Coaching]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Training plan activated successfully
+  /api/v1/ai/generate-workout-plan:
+    post:
+      summary: Generate AI workout recommendation from member health metrics (SCRUM-117)
+      tags: [AI Coaching]
+      responses:
+        '201':
+          description: AI workout recommendation generated successfully
+  /api/v1/ai/recommendations/{id}/apply:
+    post:
+      summary: Apply AI workout recommendation into a draft training plan (SCRUM-117)
+      tags: [AI Coaching]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '201':
+          description: AI recommendation applied to training plan successfully
+  /api/v1/coaching/evaluations:
+    post:
+      summary: Submit coach session evaluation and progress score (SCRUM-119)
+      tags: [Coaching]
+      responses:
+        '201':
+          description: Session evaluation created successfully
+  /api/v1/coaching/evaluations/member/{memberId}:
+    get:
+      summary: Retrieve session evaluations for a member (SCRUM-119, SCRUM-129)
+      tags: [Coaching]
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Session evaluations retrieved successfully
+  /api/v1/health/metrics:
+    post:
+      summary: Record a health metric (current assigned COACH, CENTER_MANAGER or scoped RECEPTIONIST)
+      description: MEMBER cannot write. RECEPTIONIST can append only after their own open GRANTED check-in today; no history reads or update/delete. Append with server-recorded actor/time in Asia/Ho_Chi_Minh; no backdating or automatic BMI. Units must match kg, cm, percent or null BMI. Invalid unit/value returns INVALID_HEALTH_MEASUREMENT.
+      tags: [Health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [metricName, metricValue]
+              properties:
+                memberId:
+                  type: integer
+                  format: int64
+                metricName:
+                  type: string
+                metricValue:
+                  type: number
+                  minimum: 0.01
+                  maximum: 99999999.99
+                  multipleOf: 0.01
+                unit:
+                  type: string
+      responses:
+        '200':
+          description: Health metric recorded successfully
+        '400':
+          description: INVALID_METRIC or INVALID_HEALTH_MEASUREMENT
+        '403':
+          description: Role denied, COACH_MEMBER_NOT_ASSIGNED or HEALTH_INTAKE_REQUIRED
+  /api/v1/health/metrics/my:
+    get:
+      summary: Retrieve current member's health metric history (SCRUM-119)
+      tags: [Health]
+      responses:
+        '200':
+          description: Health metric history retrieved successfully
+  /api/v1/reports/class-utilization:
+    get:
+      summary: Retrieve class occupancy and attendance utilization report (SCRUM-120, SCRUM-124)
+      tags: [Analytics]
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: disciplineId
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Class utilization report retrieved successfully
+
+
+# SCRUM-119/123/127 (2026-11-03): Successful evaluation creation also stores an
+# in-app system notification for the evaluated member in the same transaction.
+# GET /notifications includes optional nullable actionPath (max 500 characters).
+# Evaluation notification actionPath: /member/progress#coach-evaluations.
+# Existing notification fields and enum values remain compatible.
+# POST /attendance/sessions/{id}/batch additionally accepts publishEvaluations:
+# boolean (default false). true sends notifications for records with progressScore;
+# attendance-only saves omit/disable it. The coach UI enables it on evaluation
+# submission and evaluation edits. No notification survives a rolled-back save.

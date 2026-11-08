@@ -1,0 +1,48 @@
+# Dependencies and generated builds (all applications)
+node_modules/
+dist/
+target/
+coverage/
+*.tsbuildinfo
+
+# Local environment and hosting state; commit sanitized examples only
+.env*
+!.env.example
+!.env.*.example
+.vercel/
+
+# Graphify indexes, exports, caches and machine-specific metadata
+# Keep these locally; source code and maintained documentation are versioned.
+graphify-out/
+.graphify/
+.graphify_*
+
+# Test runner output
+playwright-report/
+test-results/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.drawio.bkp
+.$*.drawio.bkp
+.$*.bkp
+__pycache__/
+*.pyc
+
+# Operating system and editor state
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+# Local diagram helper scripts
+build_clean_swimlane.js
+sync_drawio_with_md.js
+verify_diagrams.js
+inspect_original.js
+
+# SCRUM-126 screenshots are attached to PR #59.
+/docs/qa/scrum126-desktop.png
+/docs/qa/scrum126-mobile.png

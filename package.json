@@ -1,0 +1,29 @@
+{
+  "name": "scms-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sports Center Management System Monorepo",
+  "scripts": {
+    "start": "scripts\\run-local.bat",
+    "dev": "scripts\\run-local.bat",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "node scripts/run-maven.mjs spring-boot:run",
+    "build:web": "npm --prefix apps/web run build",
+    "build:api": "node scripts/run-maven.mjs package -DskipTests",
+    "build": "npm run build:web && npm run build:api",
+    "db:init": "powershell -ExecutionPolicy Bypass -File ./scripts/init-db.ps1",
+    "stop": "powershell -ExecutionPolicy Bypass -File ./scripts/stop-local.ps1",
+    "lint:web": "npm --prefix apps/web run lint",
+    "test:web": "npm --prefix apps/web run test",
+    "test:api": "node scripts/run-maven.mjs test",
+    "test": "npm run test:web && npm run test:api"
+  },
+  "keywords": [
+    "scms",
+    "spring-boot",
+    "react",
+    "vite"
+  ],
+  "author": "SWP391 Team",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,109 @@
+scms:
+  ai:
+    provider: ${SCMS_AI_PROVIDER:mock}
+    api-key: ${SCMS_AI_API_KEY:}
+    model: ${SCMS_AI_MODEL:}
+    chat:
+      provider: ${SCMS_AI_CHAT_PROVIDER:${SCMS_AI_PROVIDER:disabled}}
+      api-key: ${SCMS_AI_CHAT_API_KEY:${SCMS_AI_API_KEY:}}
+      model: ${SCMS_AI_CHAT_MODEL:${SCMS_AI_MODEL:}}
+
+server:
+  port: 8080
+  # Behind the hosting proxy (Render), take the client address from X-Forwarded-For sent by trusted internal
+  # proxies only; rate limiting and VNPay vnp_IpAddr would otherwise see one proxy address for every user.
+  forward-headers-strategy: native
+  servlet:
+    session:
+      timeout: 5m
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
+
+spring:
+  profiles:
+    default: supabase
+  application:
+    name: scms-api
+  autoconfigure:
+    # Xác thực bằng JWT; không dùng UserDetailsService nên bỏ tài khoản "user" với mật khẩu sinh ngẫu nhiên trong log.
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: false
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+        hbm2ddl.halt_on_error: true
+        default_batch_fetch_size: 50
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true
+    display-request-duration: true
+    filter: true
+
+app:
+  vnpay:
+    enabled: ${VNPAY_ENABLED:false}
+    tmn-code: ${VNPAY_TMN_CODE:}
+    hash-secret: ${VNPAY_HASH_SECRET:}
+    payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+    return-url: ${VNPAY_RETURN_URL:http://localhost:5173/member/payments/vnpay/return}
+    timeout-minutes: ${VNPAY_TIMEOUT_MINUTES:15}
+  supabase:
+    url: ${SUPABASE_URL:}
+    publishable-key: ${SUPABASE_PUBLISHABLE_KEY:}
+    chat-jwt-secret: ${SUPABASE_CHAT_JWT_SECRET:}
+  jwt:
+    secret: ${APP_JWT_SECRET}
+    expiration-ms: 86400000
+  qr:
+    secret: ${APP_QR_SECRET:${APP_JWT_SECRET}}
+    ttl-seconds: ${APP_QR_TTL_SECONDS:60}
+  trial:
+    cccd-pepper: ${APP_TRIAL_CCCD_PEPPER:${APP_JWT_SECRET}}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    web-origin: ${APP_WEB_ORIGIN:http://localhost:5173}
+  auth:
+    debug-otp-enabled: ${APP_AUTH_DEBUG_OTP_ENABLED:false}
+    otp:
+      delivery: ${APP_OTP_DELIVERY:disabled}
+      from-address: ${RESEND_FROM:SÖL Fitness <no-reply@scms.bluesymphony.site>}
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    from-address: ${RESEND_FROM:SÖL Fitness <no-reply@scms.bluesymphony.site>}
+    base-url: ${RESEND_BASE_URL:https://api.resend.com}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/google/callback}
+  scheduler:
+    package-expiry:
+      cron: ${APP_SCHEDULER_PACKAGE_EXPIRY_CRON:0 0 8 * * ?}
+    class-reminder:
+      cron: ${APP_SCHEDULER_CLASS_REMINDER_CRON:0 */30 * * * ?}
+  shop:
+    shipping-fee: ${APP_SHOP_SHIPPING_FEE_VND:30000}
+    free-shipping-threshold: ${APP_SHOP_FREE_SHIPPING_THRESHOLD_VND:500000}
+    payment-window-minutes: ${APP_SHOP_RESERVATION_MINUTES:30}
+    counter-hold-hours: ${APP_SHOP_COUNTER_HOLD_HOURS:48}
+    pickup-address: "120 Hai Bà Trưng, Phường Sài Gòn, TP. Hồ Chí Minh — quầy lễ tân"
+    seed-samples: ${APP_SHOP_SEED_ENABLED:true}
+    expiry-interval-ms: ${APP_SHOP_EXPIRY_INTERVAL_MS:60000}

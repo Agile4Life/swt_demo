@@ -1,0 +1,38 @@
+package com.swp391.scms.finance.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import java.math.BigDecimal;
+
+/**
+ * Data Transfer Object for refunding a payment transaction.
+ */
+@Schema(description = "Yêu cầu hoàn tiền và hủy giao dịch")
+public class PaymentRefundRequest {
+
+    @NotBlank(message = "{validation.payment.refund_reason.not_blank}")
+    @Schema(description = "Lý do hoàn tiền", example = "Hội viên yêu cầu hủy gói do chuyển nơi ở")
+    private String reason;
+
+    @DecimalMin(value = "0.0", inclusive = false, message = "{validation.payment.amount.min}")
+    @Schema(description = "Số tiền hoàn lại (mặc định hoàn toàn bộ)", example = "1500000.00")
+    private BigDecimal refundAmount;
+
+    public PaymentRefundRequest() {}
+
+    public PaymentRefundRequest(String reason) {
+        this(reason, null);
+    }
+
+    public PaymentRefundRequest(String reason, BigDecimal refundAmount) {
+        this.reason = reason;
+        this.refundAmount = refundAmount;
+    }
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+
+    public BigDecimal getRefundAmount() { return refundAmount; }
+    public void setRefundAmount(BigDecimal refundAmount) { this.refundAmount = refundAmount; }
+}
